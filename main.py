@@ -2,6 +2,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 import requests
 
+
 foundValidCompany = False
 
 while foundValidCompany is False:
@@ -41,15 +42,15 @@ if tenkDocURL.find("ix?doc=") != -1:
     tenkDocURL = tenkDocURL[8:]
 
 tenkFilingsURL = tenkDocURL[:tenkDocURL.rfind('/')]
-print('https://www.sec.gov' + tenkFilingsURL)
+#print('https://www.sec.gov' + tenkFilingsURL)
 
 tenk_filings_content = requests.get('https://www.sec.gov' + tenkFilingsURL + '/index.json').json()
 
 for file in tenk_filings_content['directory']['item']:
     if file['name'] == 'FilingSummary.xml':
         xml_summary = 'https://www.sec.gov' + tenk_filings_content['directory']['name'] + '/' + file['name']
-        print(file['name'])
-        print(xml_summary)
+        #print(file['name'])
+        #print(xml_summary)
 
 filingSummaryURL = xml_summary.replace('FilingSummary.xml', '')
 
@@ -123,10 +124,10 @@ for report_dict in master_reports:
 # print("POSITION 2: " + report_dict[0]['name_short'])
 
 statements_data = []
-print(statements_url)
-print(income_pos)
-print(balance_pos)
-print(cashflows_pos)
+#print(statements_url)
+#print(income_pos)
+#print(balance_pos)
+#print(cashflows_pos)
 
 for statement in statements_url:
     statement_data = {}
@@ -158,128 +159,81 @@ for statement in statements_url:
     statements_data.append(statement_data)
 
 pd.options.display.width = 0
-income_headers = [statements_data[income_pos]['headers'][0][0], statements_data[income_pos]['headers'][1]]
-income_data = statements_data[income_pos]['data']
 
-income_footnote_exists = False
-for item in statements_data[income_pos]['data']:
-    if '[1]' in item:
-        income_footnote_exists = True
-        print("FOUND FOOTNOTE")
+data_statement_dfs = []
+statement_titles = []
+statement_locations = [income_pos, balance_pos, cashflows_pos]
 
-print('-' * 100)
-print(statements_data[income_pos]['data'])
-income_df = pd.DataFrame(income_data)
-income_df.index = income_df[0]
+for statement_pos in statement_locations:
+    if statement_pos == balance_pos:
+        statement_headers = statements_data[statement_pos]['headers'][0]
+    else:
+        statement_headers = [statements_data[statement_pos]['headers'][0][0], statements_data[statement_pos]['headers'][1]]
 
-# print(income_df.columns)
-income_df.index.name = 'Category'
-income_df = income_df.drop(0, axis=1)
-if income_footnote_exists is True:
-    income_df = income_df.drop(1, axis=1)
-    income_df.drop(income_df.tail(3).index, inplace=True)
-print(len(income_df.count()))
+    statement_titles.append(statement_headers[0])
+    statement_data = statements_data[statement_pos]['data']
 
-# income_df = income_df.drop(1, axis=1)
-print('-' * 100)
-print(income_headers[0])
-print('_' * 100)
-# print(income_df)
-del income_headers[0]
-# print(income_df)
-income_df = income_df.replace('[\$,)]', '', regex=True) \
-    .replace('[(]', '-', regex=True) \
-    .replace('', 'NaN', regex=True)
+    statement_footnote_exists = False
+    statement_footnote = 0
+    for item in statements_data[statement_pos]['data']:
+        if '[1]' in item:
+            statement_footnote = 1
+            print("FOUND FOOTNOTE 1")
+            statement_footnote_exists = True
 
-income_df = income_df.astype(float)
-income_df.columns = income_headers
+    statement_df = pd.DataFrame(statement_data)
+    statement_df.index = statement_df[0]
+    statement_df.index.name = 'Category'
+    statement_df = statement_df.drop(0, axis=1)
 
-# print(statements_name[income_pos])
-print(income_df)
+    statement_footnote_indices = []
+    print("LENGTH OF FOONOTES")
+    print(len(statement_footnote_indices))
 
-balance_headers = statements_data[balance_pos]['headers'][0]
-balance_data = statements_data[balance_pos]['data']
+    for index in range(statement_df.shape[1]):
+        #print('Column Number : ', index)
+        # Select column by index position using iloc[]
+        columnSeriesObj = statement_df.iloc[:, index]
+        #print("FIRST VALUE: ")
+        #print(columnSeriesObj.values[0])
+        #print('Column Contents : ', columnSeriesObj.values)
+        for value in columnSeriesObj.values:
+            if value is not None and len(value) == 3 and value[0] == '[' and value[2] == ']' and value[1].isdigit():
+                #print("FOUND FOOTNOTE")
+                statement_footnote_indices.append(index)
+                if int(value[1]) > statement_footnote:
+                    statement_footnote = int(value[1])
 
-balance_footnote_exists = False
-balance_footnote = 0
-for item in statements_data[balance_pos]['data']:
-    if '[1]' in item:
-        balance_footnote = 1
-        print("FOUND FOOTNOTE 1")
-        balance_footnote_exists = True
+    print("statement FOOTNOTE NUM")
+    print(statement_footnote_indices)
 
-balance_df = pd.DataFrame(balance_data)
-balance_df.index = balance_df[0]
-balance_df.index.name = 'Category'
-balance_df = balance_df.drop(0, axis=1)
-balance_footnote_indices = []
-print("LENGTH OF FOONOTES")
-print(len(balance_footnote_indices))
+    if len(statement_footnote_indices) != 0:
+        print(statement_footnote_indices)
+        statement_df.drop(statement_df.tail(3 + (statement_footnote - 1)).index, inplace=True)
+        statement_df = statement_df.drop(statement_df.columns[statement_footnote_indices], axis=1)
 
-for index in range(balance_df.shape[1]):
-    print('Column Number : ', index)
-    # Select column by index position using iloc[]
-    columnSeriesObj = balance_df.iloc[:, index]
-    print("FIRST VALUE: ")
-    print(columnSeriesObj.values[0])
-    print('Column Contents : ', columnSeriesObj.values)
-    for value in columnSeriesObj.values:
-        if value is not None and len(value) == 3 and value[0] == '[' and value[2] == ']' and value[1].isdigit():
-            print("FOUND FOOTNOTE")
-            balance_footnote_indices.append(index)
-            if int(value[1]) > balance_footnote:
-                balance_footnote = int(value[1])
+        if statement_df.iloc[:, -1][0] is None:
+            statement_df = statement_df.iloc[:, :-1]
 
-print("BALANCE FOOTNOTE NUM")
-print(balance_footnote)
+    statement_df.columns = range(statement_df.shape[1])
 
-if len(balance_footnote_indices) != 0:
-    print(balance_footnote_indices)
-    balance_df.drop(balance_df.tail(3 + (balance_footnote - 1)).index, inplace=True)
-    balance_df = balance_df.drop(balance_df.columns[balance_footnote_indices], axis=1)
+    statement_df = statement_df.replace('[\$,)]', '', regex=True) \
+        .replace('[(]', '-', regex=True) \
+        .replace('', 'NaN', regex=True)
 
-    if balance_df.iloc[:, -1][0] is None:
-        balance_df = balance_df.iloc[:, :-1]
+    statement_df = statement_df.astype(float)
+    del statement_headers[0]
+    statement_df.columns = statement_headers
+    # print(statements_name[statement_pos])
+    #print(statement_df)
+    data_statement_dfs.append(statement_df)
 
-balance_df.columns = range(balance_df.shape[1])
-print('-' * 100)
-print(balance_headers[0])
-print('_' * 100)
-del balance_headers[0]
+for index in range(len(statement_titles)):
+    print('-' * 100)
+    print(statement_titles[index])
+    print('_'*100)
+    print(data_statement_dfs[index])
 
-balance_df = balance_df.replace('[\$,)]', '', regex=True) \
-    .replace('[(]', '-', regex=True) \
-    .replace('', 'NaN', regex=True)
-
-balance_df = balance_df.astype(float)
-
-balance_df.columns = balance_headers
-
-# print(statements_name[balance_pos])
-print(balance_df)
-
-cashflows_headers = [statements_data[cashflows_pos]['headers'][0][0], statements_data[cashflows_pos]['headers'][1]]
-cashflows_data = statements_data[cashflows_pos]['data']
-
-cashflows_df = pd.DataFrame(cashflows_data)
-cashflows_df.index = cashflows_df[0]
-cashflows_df.index.name = 'Category'
-cashflows_df = cashflows_df.drop(0, axis=1)
-print('-' * 100)
-print(cashflows_headers[0])
-print('_' * 100)
-del cashflows_headers[0]
-
-cashflows_df = cashflows_df.replace('[\$,)]', '', regex=True) \
-    .replace('[(]', '-', regex=True) \
-    .replace('', 'NaN', regex=True)
-
-cashflows_df = cashflows_df.astype(float)
-
-cashflows_df.columns = cashflows_headers
-
-# print(statements_name[balance_pos])
-print(cashflows_df)
 
 # print(report_dict['name_short'].lower())
 # baseURL = "https://www.sec.gov/Archives/edgar/data/"
