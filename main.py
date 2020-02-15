@@ -10,8 +10,8 @@ while foundValidCompany is False:
                                                                                    '=exclude&action=getcompany&start'
                                                                                    '=0&count=100')
     print('https://www.sec.gov/cgi-bin/browse-edgar?CIK=' + ticker + '&type=10-K&Find=Search&owner'
-    '=exclude&action=getcompany&start'
-    '=0&count=100')
+                                                                     '=exclude&action=getcompany&start'
+                                                                     '=0&count=100')
     soup = BeautifulSoup(page.content, 'html.parser')
 
     if soup.find(class_='companyName') is None:
@@ -45,11 +45,19 @@ tenkFilingsURL = tenkDocURL[:tenkDocURL.rfind('/')]
 
 tenk_filings_content = requests.get('https://www.sec.gov' + tenkFilingsURL + '/index.json').json()
 
+filing_summary_exists = False
 for file in tenk_filings_content['directory']['item']:
     if file['name'] == 'FilingSummary.xml':
+        filing_summary_exists = True
         xml_summary = 'https://www.sec.gov' + tenk_filings_content['directory']['name'] + '/' + file['name']
         # print(file['name'])
         # print(xml_summary)
+        print('https://www.sec.gov' + tenk_filings_content['directory']['name'])
+        print(xml_summary)
+
+if filing_summary_exists is False:
+    print("Company does not have a filing summary- unable to parse statements")
+    quit()
 
 filingSummaryURL = xml_summary.replace('FilingSummary.xml', '')
 
@@ -75,84 +83,87 @@ balance_pos = 0
 cashflows_pos = 0
 pos_counter = 0
 
+found_income = False
+found_balanceSheets = False
+found_cashFlows = False
+
 for report_dict in master_reports:
+
     balance_sheet_aliases = ["consolidated balance sheet", "consolidated balance sheets",
                              "statement of financial position", "consolidated statement of financial position",
-                             "balance sheets"]
-
-    # balanceSheet_alias1 = "consolidated balance sheet"
-    # balanceSheet_alias2 = "consolidated balance sheets"
-    # balanceSheet_alias3 = "statement of financial position"
+                             "balance sheets", "consolidated statements of financial position",
+                             "condensed consolidated balance sheets"]
 
     income_aliases = ["consolidated statement of income", "consolidated statements of income",
-                      "consolidated statements of operations",
+                      "consolidated statements of operations", "consolidated statement of operations",
                       "statement of earnings (loss)", "consolidated statements of earnings",
-                      "consolidated statement of earnings",
+                      "consolidated statement of earnings", "statements of operations and comprehensive loss",
                       "consolidated statements of operations and comprehensive loss",
+                      "consolidated statements of operations and comprehensive income",
                       "consolidated statements of operations and comprehensive income (loss)",
-                      "statements of operations", "income statements"]
+                      "statements of operations", "income statements", "consolidated statements of income (loss)",
+                      "statement of consolidated operations", "consolidated statements of net income",
+                      "condensed consolidated statements of operations",
+                      "consolidated statements of income/(loss)"]
 
-    # income_alias1 = "consolidated statement of income"
-    # income_alias2 = "consolidated statements of income"
-    # income_alias3 = "consolidated statements of operations"
-    # income_alias4 = "statement of earnings (loss)"
-    # income_alias5 = "consolidated statements of earnings"
 
     cashflows_aliases = ["consolidated statement of cash flows", "consolidated statements of cash flows",
-                         "statement of cash flows", "statements of cash flows", "cash flows statements"]
+                         "statement of cash flows", "statements of cash flows", "cash flows statements",
+                         "statement of consolidated cash flows", "condensed consolidated statements of cash flows"]
 
-    # cashFlows_alias1 = "consolidated statement of cash flows"
-    # cashFlows_alias2 = "consolidated statements of cash flows"
-    # cashFlows_alias3 = "statement of cash flows"
+    if (any(report_dict['name_short'].lower().endswith(keywords) for keywords in balance_sheet_aliases) or
+        any(report_dict['name_short'].lower().endswith(keywords) for keywords in income_aliases) or
+            any(report_dict['name_short'].lower().endswith(keywords) for keywords in cashflows_aliases)):
 
-    # report_list = [balanceSheet_alias1, balanceSheet_alias2, balanceSheet_alias3,
-    #              income_alias1, income_alias2, income_alias3, income_alias4, income_alias5,
-    #             cashFlows_alias1, cashFlows_alias2, cashFlows_alias3]
-
-    report_list = [balance_sheet_aliases, income_aliases, cashflows_aliases]
-
-    if (report_dict['name_short'].lower() in report_list[0] or report_dict['name_short'].lower() in report_list[1] or
-            report_dict['name_short'].lower() in report_list[2]):
-
-        print(report_dict['name_short'])
-        print(report_dict['url'])
-        if report_dict['name_short'].lower() in income_aliases:
+        if any(report_dict['name_short'].lower().endswith(keywords) for keywords in income_aliases):
+            if found_income is True:
+                continue
             print("Found income sheet")
-            print(pos_counter)
+            print(report_dict['name_short'])
+            print(report_dict['url'])
+            found_income = True
+            # print(pos_counter)
             income_pos = pos_counter
 
-        elif report_dict['name_short'].lower() in balance_sheet_aliases:
+        elif any(report_dict['name_short'].lower().endswith(keywords) for keywords in balance_sheet_aliases):
+            if found_balanceSheets is True:
+                continue
             print("Found balance sheet")
-            print(pos_counter)
+            print(report_dict['name_short'])
+            print(report_dict['url'])
+            found_balanceSheets = True
+            # print(pos_counter)
             balance_pos = pos_counter
 
-        else:
+        elif any(report_dict['name_short'].lower().endswith(keywords) for keywords in cashflows_aliases):
+            if found_cashFlows is True:
+                continue
             print("Found cashflows")
-            print(pos_counter)
+            print(report_dict['name_short'])
+            print(report_dict['url'])
+            found_cashFlows = True
+            # print(pos_counter)
             cashflows_pos = pos_counter
 
         pos_counter = pos_counter + 1
         statements_name.append(report_dict['name_short'])
         statements_url.append(report_dict['url'])
 
-# print("POSITION 2: " + report_dict[0]['name_short'])
 
 statements_data = []
-# print(statements_url)
-# print(income_pos)
-# print(balance_pos)
-# print(cashflows_pos)
 
 for statement in statements_url:
-    statement_data = {}
-    statement_data['headers'] = []
-    statement_data['sections'] = []
-    statement_data['data'] = []
+    statement_data = {'headers': [], 'sections': [], 'data': []}
 
     contents = requests.get(statement).content
     soup = BeautifulSoup(contents, 'html.parser')
 
-    for index, row in enumerate(soup.table.find_all('tr')):
+    for index, row in enumerate(soup.table.find_all('tr', recursive=False)):
+
+        if row.find_all(class_="outerFootnote"):
+            #print("Outer footnote")
+            continue
+
         cols = row.find_all('td')
 
         if len(row.find_all('th')) == 0 and len(row.find_all('strong')) == 0:
@@ -163,7 +174,7 @@ for statement in statements_url:
             section_row = cols[0].text.strip()
             statement_data['sections'].append(section_row)
 
-        elif (len(row.find_all('th')) != 0):
+        elif len(row.find_all('th')) != 0:
             header_row = [ele.text.strip() for ele in row.find_all('th')]
             statement_data['headers'].append(header_row)
 
@@ -172,7 +183,7 @@ for statement in statements_url:
 
     statements_data.append(statement_data)
 
-# pd.options.display.width = 0
+pd.options.display.width = 0
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 
@@ -204,60 +215,67 @@ for statement_pos in statement_locations:
     statement_df = statement_df.drop(0, axis=1)
 
     statement_footnote_indices = []
-    print("LENGTH OF FOONOTES")
-    print(len(statement_footnote_indices))
-
     # print(statement_df)
+    # print(statement_pos)
+    # print('-' * 100)
+
+    #print(statement_df)
     for index in range(statement_df.shape[1]):
         # print('Column Number : ', index)
         # Select column by index position using iloc[]
         columnSeriesObj = statement_df.iloc[:, index]
-        # print("FIRST VALUE: ")
-        # print(columnSeriesObj.values[0])
-        # print('Column Contents : ', columnSeriesObj.values)
-        # print(columnSeriesObj.values)
+
         for value, item in enumerate(columnSeriesObj.values):
+
+            if item is not None:
+                columnSeriesObj.values[value] = columnSeriesObj.values[value].split('u', 1)[0]
+                columnSeriesObj.values[value] = columnSeriesObj.values[value].split(ticker, 1)[0]
 
             if item is None:
                 columnSeriesObj.values[value] = ""
             elif len(item) == 3 and item[0] == '[' and item[2] == ']' and item[1].isdigit():
-                print("FOUND FOOTNOTE")
-                print(item)
                 # print(columnSeriesObj.values)
                 # statement_footnote_indices.append(index)
                 if int(item[1]) > largest_statement_footnote:
                     largest_statement_footnote = int(item[1])
 
                 columnSeriesObj.values[value] = ""
-                print(value)
                 # print(columnSeriesObj.values)
 
             elif any(char.isalpha() or char == '[' for char in item):
+                print("YEA")
                 columnSeriesObj.values[value] = ""
 
+    #print(columnSeriesObj.values[-1])
+    if columnSeriesObj.values[-1] is "":
+        #print("STT")
+        statement_df = statement_df[:-1]
+
+    #print(statement_df)
     for index in range(statement_df.shape[1]):
         columnSeriesObj = statement_df.iloc[:, index]
-        print("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC")
-        print(columnSeriesObj.values)
+        # print(columnSeriesObj.values)
         if any(string != "" for string in columnSeriesObj.values):
-            print("NUMBER FOUND")
+            # print("NUMBER FOUND")
             continue
         else:
-            print("DROPPED INDEX:")
-            print(index)
+            # print("DROPPED INDEX:")
+            # print(index)
             statement_footnote_indices.append(index)
 
-    statement_df.replace(to_replace='[1]', value='gay')
-    pd.options.display.width = 0
-    print(statement_df)
 
-    print("statement FOOTNOTE NUM INDICES:")
-    print(statement_footnote_indices)
+    #statement_df.replace(to_replace='[1]', value='ree')
+    pd.options.display.width = 0
+    #print(statement_df)
+
+    # print("statement FOOTNOTE NUM INDICES:")
+    # print(statement_footnote_indices)
 
     if len(statement_footnote_indices) != 0:
-        print(statement_footnote_indices)
-        statement_df.drop(statement_df.tail(3 + (statement_footnote - 1)).index, inplace=True)
+        # print(statement_footnote_indices)
+        #statement_df.drop(statement_df.tail(3 + (statement_footnote - 1)).index, inplace=True)
         statement_df = statement_df.drop(statement_df.columns[statement_footnote_indices], axis=1)
+
 
         if statement_df.iloc[:, -1][0] is None:
             statement_df = statement_df.iloc[:, :-1]
@@ -270,6 +288,7 @@ for statement_pos in statement_locations:
 
     # statement_df = statement_df.astype(float)
     del statement_headers[0]
+    #print(statement_df)
     statement_df.columns = statement_headers
     # print(statements_name[statement_pos])
     # print(statement_df)
@@ -281,44 +300,4 @@ for index in range(len(statement_titles)):
     print('_' * 100)
     print(data_statement_dfs[index])
 
-# print(report_dict['name_short'].lower())
-# baseURL = "https://www.sec.gov/Archives/edgar/data/"
-# print(baseURL + cik)
 
-# filingsPage = requests.get(baseURL + cik + "/index.json")
-# decodedFilings = filingsPage.json()
-
-
-# for filing in decodedFilings['directory']['item']:
-#   filingNum = filing['name']
-# print(filingNum)
-
-# print(baseURL + cik + '/' + filingNum + "/index.json")
-#  filingsPage = requests.get(baseURL + cik + '/' + filingNum + "/index.json")
-
-# decodedFilings = filingsPage.json()
-
-# docName = decodedFilings['directory']['item'][1]['name']
-# documentURL = baseURL + cik + '/' + filingNum + '/' + docName
-
-# directoryIndex = requests.get(documentURL)
-# soup = BeautifulSoup(directoryIndex.content, 'html.parser')
-
-# print("hi")
-
-# if soup.find(text="8-K") is None:
-#   print("None")
-# else:
-#  print(documentURL)
-
-
-# print(baseURL + cik + '/' + filingNum)
-# if soup.find(text="10-K") != "None":
-# print(documentURL)
-# for document in decodedFilings['directory']['item']:
-# docName = document['name']
-# documentURL = baseURL + cik + '/' + filingNum + '/' + docName
-# print(documentURL)
-
-# maintable = soup.find(id='seriesDiv')
-# filings = maintable.find_all(nowrap='nowrap')
