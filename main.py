@@ -20,7 +20,7 @@ while foundValidCompany is False:
 
     companyName = soup.find(class_='companyName').text[:-26]
     cik = companyName[-10:]
-    companyName = companyName[:-18]
+    companyName = companyName[:-17]
     print(companyName)
     print("CIK: " + cik)
 
@@ -41,7 +41,7 @@ if tenkDocURL.find("ix?doc=") != -1:
     tenkDocURL = tenkDocURL[8:]
 
 tenkFilingsURL = tenkDocURL[:tenkDocURL.rfind('/')]
-# print('https://www.sec.gov' + tenkFilingsURL)
+print('https://www.sec.gov' + tenkFilingsURL)
 
 tenk_filings_content = requests.get('https://www.sec.gov' + tenkFilingsURL + '/index.json').json()
 
@@ -50,8 +50,6 @@ for file in tenk_filings_content['directory']['item']:
     if file['name'] == 'FilingSummary.xml':
         filing_summary_exists = True
         xml_summary = 'https://www.sec.gov' + tenk_filings_content['directory']['name'] + '/' + file['name']
-        # print(file['name'])
-        # print(xml_summary)
         print('https://www.sec.gov' + tenk_filings_content['directory']['name'])
         print(xml_summary)
 
@@ -92,7 +90,8 @@ for report_dict in master_reports:
     balance_sheet_aliases = ["consolidated balance sheet", "consolidated balance sheets",
                              "statement of financial position", "consolidated statement of financial position",
                              "balance sheets", "consolidated statements of financial position",
-                             "condensed consolidated balance sheets"]
+                             "condensed consolidated balance sheets", "consolidated statements of financial condition",
+                             "consolidated financial position"]
 
     income_aliases = ["consolidated statement of income", "consolidated statements of income",
                       "consolidated statements of operations", "consolidated statement of operations",
@@ -104,12 +103,13 @@ for report_dict in master_reports:
                       "statements of operations", "income statements", "consolidated statements of income (loss)",
                       "statement of consolidated operations", "consolidated statements of net income",
                       "condensed consolidated statements of operations",
-                      "consolidated statements of income/(loss)"]
-
+                      "consolidated statements of income/(loss)", "consolidated results of operations",
+                      "statement of consolidated income"]
 
     cashflows_aliases = ["consolidated statement of cash flows", "consolidated statements of cash flows",
                          "statement of cash flows", "statements of cash flows", "cash flows statements",
-                         "statement of consolidated cash flows", "condensed consolidated statements of cash flows"]
+                         "statement of consolidated cash flows", "condensed consolidated statements of cash flows",
+                         "consolidated statement of cashflow", "consolidated statement of cash flow"]
 
     if (any(report_dict['name_short'].lower().endswith(keywords) for keywords in balance_sheet_aliases) or
         any(report_dict['name_short'].lower().endswith(keywords) for keywords in income_aliases) or
@@ -243,7 +243,7 @@ for statement_pos in statement_locations:
                 # print(columnSeriesObj.values)
 
             elif any(char.isalpha() or char == '[' for char in item):
-                print("YEA")
+                #print("YEA")
                 columnSeriesObj.values[value] = ""
 
     #print(columnSeriesObj.values[-1])
@@ -289,9 +289,14 @@ for statement_pos in statement_locations:
     # statement_df = statement_df.astype(float)
     del statement_headers[0]
     #print(statement_df)
+    #print(statement_headers[0])
+    for index, item in enumerate(statement_headers[0]):
+        if len(item) is 3:
+            del statement_headers[0][index]
+    #print(statement_headers[0])
     statement_df.columns = statement_headers
     # print(statements_name[statement_pos])
-    # print(statement_df)
+    #print(statement_df)
     data_statement_dfs.append(statement_df)
 
 for index in range(len(statement_titles)):
